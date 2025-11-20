@@ -157,7 +157,12 @@
             range_month: 'This Month', range_year: 'This Year', range_all: 'All Time',
             cost_km: 'Cost / km', total_dist: 'Total Dist',
             edit_vehicle: 'Edit Vehicle', edit_record: 'Edit Record',
-            save_changes: 'Save Changes', cancel: 'Cancel', delete: 'Delete'
+            save_changes: 'Save Changes', cancel: 'Cancel', delete: 'Delete',
+            // New translations for Reminders
+            license_exp: 'License Expiry', license_cost: 'Renewal Cost',
+            insurance_exp: 'Insurance Expiry', insurance_cost: 'Renewal Cost',
+            reminders: 'Reminders', expired: 'Expired', days_left: 'days left',
+            fixed_costs: 'Annual Fixed Costs', section_fixed: 'Fixed Costs & Expiry'
         },
         zh: {
             nav_dash: '首頁', nav_fuel: '加油', nav_service: '維修', nav_stats: '統計', nav_settings: '設定',
@@ -187,7 +192,12 @@
             range_month: '本月', range_year: '今年', range_all: '全部',
             cost_km: '每公里成本', total_dist: '總里程',
             edit_vehicle: '編輯車輛', edit_record: '編輯紀錄',
-            save_changes: '保存修改', cancel: '取消', delete: '刪除'
+            save_changes: '保存修改', cancel: '取消', delete: '刪除',
+            // New translations for Reminders
+            license_exp: '車牌到期日期', license_cost: '車牌續期費用',
+            insurance_exp: '保險到期日期', insurance_cost: '保險續期費用',
+            reminders: '提醒通知', expired: '已過期', days_left: '天後到期',
+            fixed_costs: '年度固定支出', section_fixed: '車牌與保險'
         }
     };
 
@@ -241,7 +251,7 @@
         updateVehicle(updatedVehicle) {
             const index = this.data.vehicles.findIndex(v => v.id === updatedVehicle.id);
             if (index !== -1) {
-                this.data.vehicles[index] = updatedVehicle;
+                this.data.vehicles[index] = { ...this.data.vehicles[index], ...updatedVehicle };
                 this.save();
             }
         },
@@ -333,15 +343,15 @@
         },
         formatCurrency(amount) {
             const symbol = store.data.settings.currency;
-            return `${symbol}${parseFloat(amount).toFixed(2)}`;
+            return `${symbol}${parseFloat(amount || 0).toFixed(2)}`;
         },
         formatDist(dist) {
             const unit = store.data.settings.unitSystem === 'metric' ? 'km' : 'mi';
-            return `${parseInt(dist).toLocaleString()} ${unit}`;
+            return `${parseInt(dist || 0).toLocaleString()} ${unit}`;
         },
         formatFuel(vol) {
             const unit = store.data.settings.unitSystem === 'metric' ? 'L' : 'gal';
-            return `${parseFloat(vol).toFixed(1)} ${unit}`;
+            return `${parseFloat(vol || 0).toFixed(1)} ${unit}`;
         },
         calculateStats(vehicleId, timeRange = 'month') {
             // 1. Determine Date Range
@@ -397,6 +407,15 @@
                     (err) => resolve(null)
                 );
             });
+        },
+        getDaysLeft(dateStr) {
+            if (!dateStr) return null;
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const target = new Date(dateStr);
+            target.setHours(0,0,0,0);
+            const diffTime = target - today;
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         }
     };
 
@@ -491,6 +510,9 @@
                     <button onclick="ui.setDashFilter('all')" class="px-4 py-1.5 rounded-full text-xs font-bold transition shadow-sm ${store.dashboardFilter === 'all' ? 'bg-white text-teal-600' : 'bg-white/30 text-white backdrop-blur-md hover:bg-white/40'}">${t('range_all')}</button>
                 </div>
 
+                <!-- Reminders Section -->
+                ${this.renderReminders(activeCar)}
+
                 <!-- 2x2 Stats Grid -->
                 <div class="grid grid-cols-2 gap-3 px-4 mb-8">
                     <!-- 1. Efficiency -->
@@ -537,6 +559,86 @@
                 </div>
             `;
             container.innerHTML = html;
+        },
+
+        renderReminders(car) {
+            const licDays = utils.getDaysLeft(car.licenseDate);
+            const insDays = utils.getDaysLeft(car.insuranceDate);
+            
+            if (licDays === null && insDays === null) return '';
+
+            const items = [];
+            
+            if (licDays !== null) {
+                items.push({
+                    type: t('license_exp'),
+                    days: licDays,
+                    cost: car.licenseCost,
+                    icon: '📄'
+                });
+            }
+            if (insDays !== null) {
+                items.push({
+                    type: t('insurance_exp'),
+                    days: insDays,
+                    cost: car.insuranceCost,
+                    icon: '🛡️'
+                });
+            }
+
+            // Sort by urgency (days ascending)
+            items.sort((a, b) => a.days - b.days);
+
+            let html = `<div class="px-6 mb-6"><div class="bg-white rounded-2xl card-shadow overflow-hidden">
+                <div class="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                        ${t('reminders')}
+                    </h3>
+                </div>
+                <div class="p-2">`;
+
+            items.forEach(item => {
+                let bgClass, textClass, statusText;
+                
+                if (item.days < 0) {
+                    bgClass = 'bg-red-50 border-red-100';
+                    textClass = 'text-red-600';
+                    statusText = t('expired');
+                } else if (item.days <= 15) {
+                    bgClass = 'bg-red-50 border-red-100';
+                    textClass = 'text-red-600';
+                    statusText = `${item.days} ${t('days_left')}`;
+                } else if (item.days <= 30) {
+                    bgClass = 'bg-yellow-50 border-yellow-100';
+                    textClass = 'text-yellow-600';
+                    statusText = `${item.days} ${t('days_left')}`;
+                } else {
+                    bgClass = 'bg-emerald-50 border-emerald-100';
+                    textClass = 'text-emerald-600';
+                    statusText = `${item.days} ${t('days_left')}`;
+                }
+
+                html += `
+                    <div onclick="ui.openAddVehicle('${car.id}')" class="${bgClass} border rounded-xl p-3 mb-2 last:mb-0 flex items-center justify-between transition active:opacity-70 cursor-pointer">
+                        <div class="flex items-center gap-3">
+                            <div class="text-xl">${item.icon}</div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-700">${item.type}</p>
+                                <p class="text-[10px] text-slate-500">${utils.formatCurrency(item.cost)}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs font-bold ${textClass} px-2 py-1 rounded-md bg-white/60">
+                                ${statusText}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `</div></div></div>`;
+            return html;
         },
 
         renderRecentList(vid) {
@@ -720,6 +822,17 @@
                      <h1 class="text-3xl font-bold text-slate-800">${t('title_analytics')}</h1>
                  </div>
                  <div class="p-4 pb-24 space-y-6">
+                     <!-- Fixed Costs Card -->
+                     <div class="bg-white p-4 rounded-2xl card-shadow flex justify-between items-center">
+                         <div>
+                             <h3 class="text-sm font-bold text-slate-400 uppercase">${t('fixed_costs')}</h3>
+                             <p class="text-[10px] text-slate-400 mt-1">(${t('license_cost')} + ${t('insurance_cost')})</p>
+                         </div>
+                         <div class="text-2xl font-bold text-slate-800">
+                            ${utils.formatCurrency((parseFloat(activeCar.licenseCost)||0) + (parseFloat(activeCar.insuranceCost)||0))}
+                         </div>
+                     </div>
+
                      <!-- Cost Card -->
                      <div class="bg-white p-4 rounded-2xl card-shadow">
                          <h3 class="text-sm font-bold text-slate-400 uppercase mb-4">${t('expense_breakdown')}</h3>
@@ -935,7 +1048,10 @@
             const el = document.getElementById('modal-container');
             const content = document.getElementById('modal-content');
             
-            let vehicle = { make: '', model: '', year: '', currentOdometer: '' };
+            let vehicle = { 
+                make: '', model: '', year: '', currentOdometer: '',
+                licenseDate: '', licenseCost: '', insuranceDate: '', insuranceCost: '' 
+            };
             let title = t('add_vehicle');
             let btnText = t('save_vehicle');
             let hiddenId = '';
@@ -943,16 +1059,22 @@
 
             if (id) {
                 vehicle = store.getVehicle(id);
+                // Ensure fields exist
+                vehicle.licenseDate = vehicle.licenseDate || '';
+                vehicle.licenseCost = vehicle.licenseCost || '';
+                vehicle.insuranceDate = vehicle.insuranceDate || '';
+                vehicle.insuranceCost = vehicle.insuranceCost || '';
+                
                 title = t('edit_vehicle');
                 btnText = t('save_changes');
                 hiddenId = `<input type="hidden" name="id" value="${id}">`;
-                // Note: Vehicle deletion not implemented in this cycle as per simple prompt requirement focus on record modification
             }
 
             content.innerHTML = `
                 <h2 class="text-xl font-bold mb-6">${title}</h2>
                 <form onsubmit="ui.submitVehicle(event)" class="space-y-4">
                     ${hiddenId}
+                    <!-- Basic Info -->
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">${t('make')}</label>
                         <input type="text" name="make" required value="${vehicle.make}" class="w-full bg-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-teal-500" placeholder="${t('vehicle_placeholder_make')}">
@@ -971,7 +1093,35 @@
                             <input type="number" name="odometer" required value="${vehicle.currentOdometer}" class="w-full bg-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-teal-500" placeholder="0">
                         </div>
                     </div>
-                    <div class="flex gap-3 mt-4">
+                    
+                    <!-- Fixed Costs & Expiry -->
+                    <div class="pt-4 border-t border-slate-100">
+                        <h3 class="text-sm font-bold text-slate-700 mb-3">${t('section_fixed')}</h3>
+                        <!-- License -->
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">${t('license_exp')}</label>
+                                <input type="date" name="licenseDate" value="${vehicle.licenseDate}" class="w-full bg-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-teal-500">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">${t('license_cost')}</label>
+                                <input type="number" step="0.01" name="licenseCost" value="${vehicle.licenseCost}" class="w-full bg-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-teal-500">
+                            </div>
+                        </div>
+                        <!-- Insurance -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">${t('insurance_exp')}</label>
+                                <input type="date" name="insuranceDate" value="${vehicle.insuranceDate}" class="w-full bg-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-teal-500">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">${t('insurance_cost')}</label>
+                                <input type="number" step="0.01" name="insuranceCost" value="${vehicle.insuranceCost}" class="w-full bg-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-teal-500">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 mt-6">
                         <button type="button" onclick="ui.closeModal()" class="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl">${t('cancel')}</button>
                         <button type="submit" class="flex-[2] bg-teal-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-teal-500/30">${btnText}</button>
                     </div>
@@ -1154,7 +1304,12 @@
                 make: fd.get('make'),
                 model: fd.get('model'),
                 year: fd.get('year'),
-                currentOdometer: parseInt(fd.get('odometer'))
+                currentOdometer: parseInt(fd.get('odometer')),
+                // Capture new fields
+                licenseDate: fd.get('licenseDate') || '',
+                licenseCost: parseFloat(fd.get('licenseCost')) || 0,
+                insuranceDate: fd.get('insuranceDate') || '',
+                insuranceCost: parseFloat(fd.get('insuranceCost')) || 0
             };
 
             if (id) {
